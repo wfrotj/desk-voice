@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Voice">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#101411">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="icon" href="/icon-192.png">
+  <title>Voice</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101411;
+      --ink: #f4f1ea;
+      --muted: #a9a496;
+      --ready: #2f7d55;
+      --live: #c62828;
+      --sent: #245c8a;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      min-height: 100vh;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 22px;
+      padding:
+        max(28px, env(safe-area-inset-top))
+        24px
+        max(36px, env(safe-area-inset-bottom));
+      text-align: center;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+    p {
+      margin: 8px 0 0;
+      max-width: 18rem;
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.98rem;
+    }
+    .hint {
+      margin-top: 8px;
+      font-size: 0.82rem;
+    }
+    .control {
+      position: relative;
+      width: 188px;
+      height: 188px;
+      display: grid;
+      place-items: center;
+      margin-top: 12px;
+    }
+    .control::before {
+      content: "";
+      position: absolute;
+      inset: -48px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(47, 125, 85, 0.28), transparent 68%);
+      pointer-events: none;
+    }
+    body.live .control::before {
+      background: radial-gradient(circle, rgba(198, 40, 40, 0.32), transparent 68%);
+    }
+    body.busy .control::before {
+      background: radial-gradient(circle, rgba(36, 92, 138, 0.32), transparent 68%);
+    }
+    .ring {
+      position: absolute;
+      width: 168px;
+      height: 168px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      opacity: 0;
+      pointer-events: none;
+    }
+    body.live .ring {
+      border-color: rgba(198, 40, 40, 0.55);
+      animation: pulse 1.7s ease-out infinite;
+    }
+    body.live .ring.late { animation-delay: 0.55s; }
+    #talk {
+      position: relative;
+      width: 168px;
+      height: 168px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--ready);
+      color: white;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        0 14px 36px rgba(0, 0, 0, 0.38);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      transition: transform 0.12s ease, background 0.15s ease;
+    }
+    #talk:active:not(:disabled) { transform: scale(0.96); }
+    #talk.live { background: var(--live); }
+    #talk.busy { background: var(--sent); }
+    #talk:disabled { opacity: 0.72; cursor: default; }
+    .mic, .wait {
+      width: 74px;
+      height: 74px;
+    }
+    .wait { display: none; }
+    #talk.busy .mic { display: none; }
+    #talk.busy .wait {
+      display: block;
+      width: 58px;
+      height: 58px;
+      animation: spin 0.8s linear infinite;
+    }
+    .wave {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      height: 0;
+      overflow: hidden;
+    }
+    body.live .wave { height: 46px; }
+    .wave span {
+      width: 4px;
+      height: 40px;
+      border-radius: 99px;
+      background: #ffd8d4;
+      transform: scaleY(0.2);
+      transform-origin: center;
+    }
+    .time {
+      min-height: 1.6rem;
+      font-variant-numeric: tabular-nums;
+      font-size: 1.55rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+    body.live .time { color: #ffd7d3; }
+    .cues {
+      display: flex;
+      gap: 16px;
+    }
+    .cue {
+      width: 96px;
+      height: 78px;
+      border: 0;
+      border-radius: 18px;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 0;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.18),
+        0 8px 18px rgba(0, 0, 0, 0.28);
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+    .cue svg { width: 30px; height: 30px; }
+    .cue:active:not(:disabled),
+    .cue.playing { transform: scale(0.96); }
+    .cue:disabled { opacity: 0.55; cursor: default; }
+    #siren { background: #b42318; }
+    #knock { background: #3c4a43; }
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 0.5; }
+      100% { transform: scale(1.55); opacity: 0; }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <main>
+    <div>
+      <h1>Send to computer</h1>
+      <p id="status">Tap the microphone, speak, then tap again. The computer plays it.</p>
+    </div>
+    <div class="control">
+      <span class="ring"></span>
+      <span class="ring late"></span>
+      <button id="talk" type="button" aria-label="Record">
+        <svg class="mic" viewBox="0 0 64 64" aria-hidden="true">
+          <rect x="24" y="6" width="16" height="32" rx="8" fill="currentColor"/>
+          <path d="M16 30a16 16 0 0 0 32 0" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+          <path d="M32 46v8M23 54h18" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+        </svg>
+        <svg class="wait" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="16" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="68 40"/>
+        </svg>
+      </button>
+    </div>
+    <div class="wave" id="wave" aria-hidden="true">
+      <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="time" id="time"></div>
+    <div class="cues">
+      <button id="siren" class="cue" type="button" aria-label="Play siren">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M32 4v8M14 16l7 7M50 16l-7 7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+          <path d="M18 42c0-9 6-16 14-16s14 7 14 16" fill="currentColor"/>
+          <rect x="12" y="40" width="40" height="8" rx="2" fill="currentColor"/>
+          <rect x="22" y="51" width="20" height="6" rx="2" fill="currentColor"/>
+        </svg>
+        Siren
+      </button>
+      <button id="knock" class="cue" type="button" aria-label="Play knock">
+        <svg viewBox="0 0 64 64" aria-hidden="true">
+          <rect x="20" y="6" width="30" height="52" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
+          <circle cx="42" cy="34" r="2.6" fill="currentColor"/>
+          <path d="M12 24c3.2 3 3.2 6 0 9M9 31c3.2 3 3.2 6 0 9" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+        </svg>
+        Knock
+      </button>
+    </div>
+    <p class="hint">Tailscale must be connected, and the computer must be on.</p>
+  </main>
+  <script>
+    const talk = document.getElementById("talk");
+    const sirenButton = document.getElementById("siren");
+    const knockButton = document.getElementById("knock");
+    const status = document.getElementById("status");
+    const time = document.getElementById("time");
+    const idleStatus = "Tap the microphone, speak, then tap again. The computer plays it.";
+    const bars = Array.from(document.querySelectorAll("#wave span"));
+    const maxSeconds = __MAX_SECONDS__;
+
+    let recording = false;
+    let finishing = false;
+    let startedAt = 0;
+    let timer = 0;
+    let meterFrame = 0;
+    let level = 0;
+    let cueNote = 0;
+    let audioContext = null;
+    let processor = null;
+    let source = null;
+    let stream = null;
+    let chunks = [];
+
+    if (!window.isSecureContext) {
+      status.textContent = "Open this page with the Tailscale link. The microphone needs the secure address.";
+      talk.disabled = true;
+    }
+
+    talk.addEventListener("click", async () => {
+      if (talk.disabled) return;
+      if (recording) {
+        await finish(true);
+        return;
+      }
+      await start();
+    });
+
+    sirenButton.addEventListener("click", () => {
+      playCue(sirenButton, "/siren", "Playing the siren.", "The computer is playing the siren.");
+    });
+
+    knockButton.addEventListener("click", () => {
+      playCue(knockButton, "/knock", "Playing the knock.", "The computer is playing the knock.");
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || !recording || !stream) return;
+      const stopped = stream.getTracks().some((track) => track.readyState !== "live");
+      if (stopped) {
+        abandon("Recording stopped when you left this app. Tap the microphone to try again.");
+      }
+    });
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    function setMode(mode) {
+      talk.className = mode === "ready" ? "" : mode;
+      document.body.classList.toggle("live", mode === "live");
+      document.body.classList.toggle("busy", mode === "busy");
+      const labels = { ready: "Record", live: "Send", busy: "Sending" };
+      talk.setAttribute("aria-label", labels[mode]);
+      const cuesOn = mode === "ready";
+      sirenButton.disabled = !cuesOn;
+      knockButton.disabled = !cuesOn;
+      if (mode !== "live") resetMeter();
+    }
+
+    async function playCue(button, path, playing, done) {
+      if (recording || finishing || button.disabled) return;
+      sirenButton.disabled = true;
+      knockButton.disabled = true;
+      button.classList.add("playing");
+      status.textContent = playing;
+      clearTimeout(cueNote);
+      try {
+        const response = await fetch(path, { method: "POST" });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || "send failed");
+        }
+        status.textContent = done;
+        cueNote = setTimeout(() => {
+          if (!recording && !finishing) status.textContent = idleStatus;
+        }, 2400);
+      } catch (error) {
+        status.textContent = "The computer did not receive it. Check that Tailscale is connected and the computer is awake.";
+      } finally {
+        button.classList.remove("playing");
+        if (!recording && !finishing) {
+          sirenButton.disabled = false;
+          knockButton.disabled = false;
+        }
+      }
+    }
+
+    function paintMeter() {
+      if (!recording) return;
+      const now = performance.now() / 170;
+      bars.forEach((bar, index) => {
+        const wave = 0.5 + 0.5 * Math.sin(now + index * 0.72);
+        const height = 0.18 + wave * 0.34 + level * wave * 0.9;
+        bar.style.transform = "scaleY(" + Math.min(1.08, height).toFixed(3) + ")";
+      });
+      meterFrame = requestAnimationFrame(paintMeter);
+    }
+
+    function resetMeter() {
+      level = 0;
+      cancelAnimationFrame(meterFrame);
+      bars.forEach((bar) => { bar.style.transform = "scaleY(0.2)"; });
+    }
+
+    function abandon(message) {
+      if (finishing || !recording) return;
+      recording = false;
+      clearInterval(timer);
+      cleanup();
+      time.textContent = "";
+      talk.disabled = false;
+      setMode("ready");
+      status.textContent = message;
+    }
+
+    async function start() {
+      status.textContent = "Listening. Tap the microphone again to send.";
+      setMode("live");
+      chunks = [];
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => {
+          track.addEventListener("ended", () => {
+            abandon("Recording stopped when you left this app. Tap the microphone to try again.");
+          });
+        });
+        audioContext = new AudioContext();
+        await audioContext.resume();
+        source = audioContext.createMediaStreamSource(stream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+        const silent = audioContext.createGain();
+        silent.gain.value = 0;
+        processor.onaudioprocess = (event) => {
+          if (!recording) return;
+          const data = event.inputBuffer.getChannelData(0);
+          chunks.push(new Float32Array(data));
+          let sum = 0;
+          let count = 0;
+          for (let index = 0; index < data.length; index += 16) {
+            sum += data[index] * data[index];
+            count += 1;
+          }
+          level = Math.min(1, Math.sqrt(sum / count) * 8);
+        };
+        source.connect(processor);
+        processor.connect(silent);
+        silent.connect(audioContext.destination);
+        recording = true;
+        startedAt = Date.now();
+        time.textContent = "0:00";
+        timer = setInterval(tick, 200);
+        meterFrame = requestAnimationFrame(paintMeter);
+      } catch (error) {
+        recording = false;
+        setMode("ready");
+        status.textContent = "The microphone is blocked. Allow the microphone for this page, then try again.";
+        cleanup();
+      }
+    }
+
+    function tick() {
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      const mins = Math.floor(seconds / 60);
+      const secs = String(seconds % 60).padStart(2, "0");
+      time.textContent = mins + ":" + secs;
+      if (seconds >= maxSeconds) finish(true);
+    }
+
+    async function finish(send) {
+      if (finishing || !recording) return;
+      finishing = true;
+      recording = false;
+      clearInterval(timer);
+      const rate = audioContext ? audioContext.sampleRate : 48000;
+      const blob = encodeWav(chunks, rate);
+      cleanup();
+      time.textContent = "";
+      if (!send || blob.size < 100) {
+        finishing = false;
+        setMode("ready");
+        status.textContent = "Nothing was recorded. Tap the microphone and speak.";
+        return;
+      }
+      talk.disabled = true;
+      setMode("busy");
+      status.textContent = "Sending to the computer.";
+      try {
+        const response = await fetch("/play", {
+          method: "POST",
+          headers: { "Content-Type": "audio/wav" },
+          body: blob
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || "send failed");
+        }
+        status.textContent = "Sent. The computer is playing it.";
+      } catch (error) {
+        status.textContent = "The computer did not receive it. Check that Tailscale is connected and the computer is awake.";
+      } finally {
+        talk.disabled = false;
+        finishing = false;
+        setMode("ready");
+      }
+    }
+
+    function cleanup() {
+      if (processor) processor.disconnect();
+      if (source) source.disconnect();
+      if (stream) stream.getTracks().forEach((track) => track.stop());
+      if (audioContext) audioContext.close();
+      processor = null;
+      source = null;
+      stream = null;
+      audioContext = null;
+      chunks = [];
+    }
+
+    function encodeWav(buffers, sampleRate) {
+      let length = 0;
+      buffers.forEach((buffer) => { length += buffer.length; });
+      const header = 44;
+      const output = new ArrayBuffer(header + length * 2);
+      const view = new DataView(output);
+      writeText(view, 0, "RIFF");
+      view.setUint32(4, 36 + length * 2, true);
+      writeText(view, 8, "WAVE");
+      writeText(view, 12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, 1, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * 2, true);
+      view.setUint16(32, 2, true);
+      view.setUint16(34, 16, true);
+      writeText(view, 36, "data");
+      view.setUint32(40, length * 2, true);
+      let offset = 44;
+      buffers.forEach((buffer) => {
+        for (let index = 0; index < buffer.length; index += 1) {
+          const sample = Math.max(-1, Math.min(1, buffer[index]));
+          view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+          offset += 2;
+        }
+      });
+      return new Blob([output], { type: "audio/wav" });
+    }
+
+    function writeText(view, offset, text) {
+      for (let index = 0; index < text.length; index += 1) {
+        view.setUint8(offset + index, text.charCodeAt(index));
+      }
+    }
+  </script>
+</body>
+</html>
